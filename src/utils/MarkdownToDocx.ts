@@ -1,11 +1,37 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Math } from "docx";
 import { convertLatexToMath } from "./DocxMathConverter";
 
+// Helper to normalize AI/User input for better compatibility
+export function normalizeMarkdown(markdown: string): string {
+    if (!markdown) return "";
+    
+    let normalized = markdown;
+
+    // 1. Convert LaTeX-style inline math \( ... \) to $ ... $
+    normalized = normalized.replace(/\\\((.*?)\\\)/g, '$$$1$$');
+
+    // 2. Convert LaTeX-style display math \[ ... \] to $$ ... $$
+    normalized = normalized.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+
+    // 3. Ensure $$ ... $$ display math is properly spaced (on new lines)
+    // This handles cases like: text $$math$$ text  OR  $$\begin{cases}...\end{cases}$$ (one line)
+    // We wrap them in newlines to ensure remark-math and our parser identify them as block math
+    normalized = normalized.replace(/\$\$([\s\S]*?)\$\$/g, (match, content) => {
+        // Keep content as is, just wrap with newlines and $$
+        return `\n\n$$\n${content.trim()}\n$$\n\n`;
+    });
+
+    return normalized;
+}
+
 export async function generateDocx(markdown: string): Promise<Blob> {
+    // Pre-process the markdown to fix formatting issues
+    const cleanMarkdown = normalizeMarkdown(markdown);
+    
     const doc = new Document({
         sections: [{
             properties: {},
-            children: parseMarkdown(markdown)
+            children: parseMarkdown(cleanMarkdown)
         }]
     });
     return await Packer.toBlob(doc);

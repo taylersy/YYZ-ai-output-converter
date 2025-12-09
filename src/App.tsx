@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { saveAs } from 'file-saver';
 import MathEditor from './components/MathEditor';
-import { generateDocx } from './utils/MarkdownToDocx';
+import { generateDocx, normalizeMarkdown } from './utils/MarkdownToDocx';
 import './App.css';
 
 function App() {
@@ -88,7 +88,7 @@ function App() {
               remarkPlugins={[remarkMath]}
               rehypePlugins={[rehypeKatex]}
             >
-              {markdown}
+              {normalizeMarkdown(markdown)}
             </ReactMarkdown>
           </div>
         </div>

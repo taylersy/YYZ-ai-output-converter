@@ -7,6 +7,12 @@ export function normalizeMarkdown(markdown: string): string {
     
     let normalized = markdown;
 
+    // 0. Mobile compatibility: Convert full-width chars to half-width
+    // e.g., ＄ -> $, （ -> (, ） -> )
+    normalized = normalized.replace(/[\uff01-\uff5e]/g, function(ch) {
+        return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
+    }).replace(/\u3000/g, ' ');
+
     // 1. Convert LaTeX-style inline math \( ... \) to $ ... $
     normalized = normalized.replace(/\\\((.*?)\\\)/g, '$$$1$$');
 

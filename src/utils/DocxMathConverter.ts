@@ -49,6 +49,37 @@ export class MathAccent extends XmlComponent {
     }
 }
 
+class MathMatrixProperties extends XmlComponent {
+    constructor() {
+        super("m:mPr");
+        // Define matrix column gap to regular
+        // <m:mcs>
+        //   <m:mc>
+        //     <m:mcPr>
+        //       <m:count m:val="1"/>
+        //       <m:mcJc m:val="center"/>
+        //     </m:mcPr>
+        //   </m:mc>
+        // </m:mcs>
+        // For simplicity, we use default properties which are usually fine
+    }
+}
+
+class MathMatrixRow extends XmlComponent {
+    constructor(children: MathElement[]) {
+        super("m:mr");
+        children.forEach(child => this.root.push(child));
+    }
+}
+
+class MathMatrix extends XmlComponent {
+    constructor(rows: MathMatrixRow[]) {
+        super("m:m");
+        this.root.push(new MathMatrixProperties());
+        rows.forEach(row => this.root.push(row));
+    }
+}
+
 // --- Converter Logic ---
 
 const parser = new DOMParser();
@@ -220,6 +251,24 @@ function walkNode(node: Element | null): any[] {
         
         case "mspace":
              return [new MathRun(" ")]; // Approximation
+
+        case "mtable": {
+            const rows = Array.from(children).map(child => {
+                // child should be mtr
+                if (child.tagName.toLowerCase() === "mtr") {
+                    const cells = Array.from(child.children).map(cell => {
+                        // cell should be mtd
+                        if (cell.tagName.toLowerCase() === "mtd") {
+                            return new MathElement(walkNode(cell));
+                        }
+                        return new MathElement([]); // Empty cell fallback
+                    });
+                    return new MathMatrixRow(cells);
+                }
+                return new MathMatrixRow([]); // Empty row fallback
+            });
+            return [new MathMatrix(rows)];
+        }
              
         default:
             // Fallback for unknown tags

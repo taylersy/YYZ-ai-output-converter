@@ -16,7 +16,7 @@ export function normalizeMarkdown(markdown: string): string {
     // 3. Ensure $$ ... $$ display math is properly spaced (on new lines)
     // This handles cases like: text $$math$$ text  OR  $$\begin{cases}...\end{cases}$$ (one line)
     // We wrap them in newlines to ensure remark-math and our parser identify them as block math
-    normalized = normalized.replace(/\$\$([\s\S]*?)\$\$/g, (match, content) => {
+    normalized = normalized.replace(/\$\$([\s\S]*?)\$\$/g, (_, content) => {
         // Keep content as is, just wrap with newlines and $$
         return `\n\n$$\n${content.trim()}\n$$\n\n`;
     });

@@ -65,7 +65,7 @@ export function mathmlToDocx(mathml: string): any[] {
     if (!mathNode) return [];
 
     const semantics = mathNode.querySelector("semantics");
-    let root = semantics ? semantics : mathNode;
+    let root: Element = semantics ? semantics : mathNode;
     
     // If semantics exists, use its first child (usually mrow or the expression)
     if (semantics) {

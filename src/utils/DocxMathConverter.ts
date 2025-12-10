@@ -13,7 +13,7 @@ import {
 import katex from "katex";
 
 // --- Constants ---
-const STOP_CHARS = ["=", "<", ">", "\u2264", "\u2265", "\u2248", "\u2192", ","];
+// const STOP_CHARS = ["=", "<", ">", "\u2264", "\u2265", "\u2248", "\u2192", ","];
 
 // --- Custom Components for Missing Features ---
 
@@ -394,6 +394,7 @@ function walkNode(node: Element | null): any[] {
 
             // Post-processing for N-ary operators (Integrals/Sums) to greedily consume next terms
             // This fixes the "extra space" issue by putting the operand INSIDE the N-ary element
+            /* 
             for (let i = 0; i < result.length; i++) {
                 const component = result[i];
                 if (component instanceof MathNary) {
@@ -424,7 +425,8 @@ function walkNode(node: Element | null): any[] {
                         // so the *new* next element is at i + 1.
                     }
                 }
-            }
+            } 
+            */
 
             return result;
         }

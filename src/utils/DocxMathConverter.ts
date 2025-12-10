@@ -451,6 +451,7 @@ function walkNode(node: Element | null): any[] {
         
         case "mfrac": {
             const [num, den] = children;
+            if (!num || !den) return walkChildren(children);
             return [new MathFraction({
                 numerator: walkNode(num),
                 denominator: walkNode(den)
@@ -459,6 +460,7 @@ function walkNode(node: Element | null): any[] {
         
         case "msup": {
             const [base, sup] = children;
+            if (!base || !sup) return walkChildren(children);
             return [new MathSuperScript({
                 children: walkNode(base),
                 superScript: walkNode(sup)
@@ -467,6 +469,7 @@ function walkNode(node: Element | null): any[] {
         
         case "msub": {
             const [base, sub] = children;
+            if (!base || !sub) return walkChildren(children);
             return [new MathSubScript({
                 children: walkNode(base),
                 subScript: walkNode(sub)
@@ -475,6 +478,8 @@ function walkNode(node: Element | null): any[] {
         
         case "msubsup": {
             const [base, sub, sup] = children;
+            if (!base || !sub || !sup) return walkChildren(children);
+            
             // Check if base is an operator (integral, sum) to use MathNary
             const baseText = base.textContent || "";
             if (isIntegral(baseText)) {
@@ -510,6 +515,7 @@ function walkNode(node: Element | null): any[] {
         
         case "mroot": {
             const [base, degree] = children;
+            if (!base || !degree) return walkChildren(children);
             return [new MathRadical({
                 children: walkNode(base),
                 degree: walkNode(degree)
@@ -518,6 +524,8 @@ function walkNode(node: Element | null): any[] {
         
         case "mover": {
             const [base, over] = children;
+            if (!base || !over) return walkChildren(children);
+            
             // Check for accent
             // KaTeX often puts accent="true" on mo, or we can detect common accents
             const isAccent = over.tagName.toLowerCase() === 'mo' && (over.getAttribute('accent') === 'true' || isAccentChar(over.textContent || ""));
@@ -537,6 +545,7 @@ function walkNode(node: Element | null): any[] {
         
         case "munder": {
             const [base, under] = children;
+            if (!base || !under) return walkChildren(children);
             return [new MathLimitLower({
                 children: walkNode(base),
                 limit: walkNode(under)
@@ -545,6 +554,8 @@ function walkNode(node: Element | null): any[] {
         
         case "munderover": {
             const [base, under, over] = children;
+            if (!base || !under || !over) return walkChildren(children);
+            
             const baseText = base.textContent || "";
             
             if (isIntegral(baseText)) {

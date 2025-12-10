@@ -12,7 +12,20 @@ import {
 } from "docx";
 import katex from "katex";
 
+// --- Constants ---
+const STOP_CHARS = ["+", "-", "=", "\u2212", "<", ">", "\u2264", "\u2265", "\u2248", "\u2192", ",", "\u00B1", "\u2213"];
+
 // --- Custom Components for Missing Features ---
+
+class ExtendedMathRun extends MathRun {
+    public readonly textContent: string;
+    public readonly isOperator: boolean;
+    constructor(text: string, isOperator: boolean = false) {
+        super(text);
+        this.textContent = text;
+        this.isOperator = isOperator;
+    }
+}
 
 class MathValAttribute extends XmlAttributeComponent<{ val: string }> {
     protected readonly xmlKeys = { val: "m:val" };
@@ -25,6 +38,10 @@ class GenericXmlComponent extends XmlComponent {
     
     public addChild(child: any) {
         this.root.push(child);
+    }
+
+    public clear() {
+        this.root.length = 0;
     }
 
     public getLastChild(): any {
@@ -126,6 +143,9 @@ class MathNaryProperties extends XmlComponent {
 }
 
 class MathNary extends XmlComponent {
+    private element: GenericXmlComponent;
+    private hasContent: boolean = false;
+
     constructor(options: {
         char: string,
         limitLocation?: "subSup" | "undOvr",
@@ -148,14 +168,24 @@ class MathNary extends XmlComponent {
         }
         this.root.push(sup);
 
-        const elem = new GenericXmlComponent("m:e");
+        this.element = new GenericXmlComponent("m:e");
         if (options.children && options.children.length > 0) {
-            options.children.forEach(child => elem.addChild(child));
+            options.children.forEach(child => this.element.addChild(child));
+            this.hasContent = true;
         } else {
             // Add zero-width space to hide placeholder box
-            elem.addChild(new MathRun("\u200B"));
+            this.element.addChild(new MathRun("\u200B"));
+            this.hasContent = false;
         }
-        this.root.push(elem);
+        this.root.push(this.element);
+    }
+
+    public appendChildToBody(child: any) {
+        if (!this.hasContent) {
+            this.element.clear();
+            this.hasContent = true;
+        }
+        this.element.addChild(child);
     }
 }
 
@@ -362,6 +392,34 @@ function walkNode(node: Element | null): any[] {
                 }
             }
 
+            // Post-processing for N-ary operators (Integrals/Sums) to greedily consume next terms
+            // This fixes the "extra space" issue by putting the operand INSIDE the N-ary element
+            for (let i = 0; i < result.length; i++) {
+                const component = result[i];
+                if (component instanceof MathNary) {
+                    // Greedy consumption
+                    while (i + 1 < result.length) {
+                        const next = result[i + 1];
+                        
+                        // Check for stop condition
+                        let stop = false;
+                        if (next instanceof ExtendedMathRun && next.isOperator) {
+                            if (STOP_CHARS.includes(next.textContent)) {
+                                stop = true;
+                            }
+                        }
+                        
+                        if (stop) break;
+                        
+                        // Consume
+                        component.appendChildToBody(next);
+                        result.splice(i + 1, 1);
+                        // Don't increment i, because we removed the next element, 
+                        // so the *new* next element is at i + 1.
+                    }
+                }
+            }
+
             return result;
         }
         
@@ -374,11 +432,15 @@ function walkNode(node: Element | null): any[] {
 
         case "mi":
         case "mn":
-        case "mo":
         case "mtext":
         case "ms": {
             const text = node.textContent || "";
-            return [new MathRun(text)];
+            return [new ExtendedMathRun(text, false)];
+        }
+
+        case "mo": {
+            const text = node.textContent || "";
+            return [new ExtendedMathRun(text, true)];
         }
         
         case "mfrac": {
@@ -510,7 +572,7 @@ function walkNode(node: Element | null): any[] {
         }
         
         case "mspace":
-             return [new MathRun(" ")]; // Approximation
+             return [new ExtendedMathRun(" ", false)]; // Approximation
 
         case "mtable": {
             const rows = Array.from(children).map(child => {

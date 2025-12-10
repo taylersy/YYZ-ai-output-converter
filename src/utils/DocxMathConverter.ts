@@ -145,8 +145,11 @@ class MathNary extends XmlComponent {
         this.root.push(sup);
 
         const elem = new GenericXmlComponent("m:e");
-        if (options.children) {
+        if (options.children && options.children.length > 0) {
             options.children.forEach(child => elem.addChild(child));
+        } else {
+            // Add zero-width space to hide placeholder box
+            elem.addChild(new MathRun("\u200B"));
         }
         this.root.push(elem);
     }

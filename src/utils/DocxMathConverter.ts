@@ -80,6 +80,38 @@ class MathMatrix extends XmlComponent {
     }
 }
 
+// --- Delimiter Support (Fences) ---
+
+class MathDelimiterShape extends XmlAttributeComponent<{ val: string }> {
+    protected readonly xmlKeys = { val: "m:val" };
+}
+
+class MathDelimiterChar extends XmlComponent {
+    constructor(tagName: string, val: string) {
+        super(tagName);
+        this.root.push(new MathDelimiterShape({ val }));
+    }
+}
+
+class MathDelimiterProperties extends XmlComponent {
+    constructor(begChr: string, endChr: string) {
+        super("m:dPr");
+        // Only add if not default? Defaults are usually ( and )
+        // But for safety we always add
+        this.root.push(new MathDelimiterChar("m:begChr", begChr));
+        this.root.push(new MathDelimiterChar("m:endChr", endChr));
+    }
+}
+
+class MathDelimiter extends XmlComponent {
+    constructor(children: any[], begChr: string = "(", endChr: string = ")") {
+        super("m:d");
+        this.root.push(new MathDelimiterProperties(begChr, endChr));
+        // m:d requires content wrapped in m:e
+        this.root.push(new MathElement(children));
+    }
+}
+
 // --- Converter Logic ---
 
 const parser = new DOMParser();
@@ -116,10 +148,46 @@ function walkNode(node: Element | null): any[] {
 
     switch (tagName) {
         case "math":
-        case "mrow":
         case "mstyle":
             return walkChildren(children);
-            
+
+        case "mrow": {
+            // Check for fences (delimiters)
+            // KaTeX often outputs <mrow><mo fence="true">(</mo> ... <mo fence="true">)</mo></mrow>
+            if (children.length >= 2) {
+                const first = children[0];
+                const last = children[children.length - 1];
+                
+                const isFirstFence = isFence(first);
+                const isLastFence = isFence(last);
+
+                if (isFirstFence || isLastFence) {
+                    const begChr = isFirstFence ? (first.textContent || "") : "";
+                    const endChr = isLastFence ? (last.textContent || "") : "";
+                    
+                    // Filter out the fence nodes from children
+                    const contentNodes = children.slice(
+                        isFirstFence ? 1 : 0, 
+                        isLastFence ? children.length - 1 : children.length
+                    );
+                    
+                    // Handle "." as empty delimiter
+                    const cleanBeg = begChr === "." ? "" : begChr;
+                    const cleanEnd = endChr === "." ? "" : endChr;
+
+                    return [new MathDelimiter(walkChildren(contentNodes), cleanBeg, cleanEnd)];
+                }
+            }
+            return walkChildren(children);
+        }
+        
+        case "mfenced": {
+            // Native MathML fenced element
+            const open = node.getAttribute("open") || "(";
+            const close = node.getAttribute("close") || ")";
+            return [new MathDelimiter(walkChildren(children), open, close)];
+        }
+
         case "mi":
         case "mn":
         case "mo":
@@ -306,6 +374,18 @@ function isAccentChar(text: string): boolean {
         '→', '⃗', '^', 'ˉ', '~', '˙', '¨'
     ];
     return accents.includes(text) || text.length === 1 && text.charCodeAt(0) >= 0x300 && text.charCodeAt(0) <= 0x36F;
+}
+
+function isFence(node: Element): boolean {
+    if (node.tagName.toLowerCase() !== 'mo') return false;
+    
+    // Explicit fence attribute from KaTeX
+    if (node.getAttribute('fence') === 'true') return true;
+    
+    // Common fence characters
+    const text = node.textContent || "";
+    const fenceChars = ['(', ')', '[', ']', '{', '}', '|', '\u2016', '\u27E8', '\u27E9', '.'];
+    return fenceChars.includes(text);
 }
 
 export function convertLatexToMath(latex: string, displayMode: boolean = false): any[] {

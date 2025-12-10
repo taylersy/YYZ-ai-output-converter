@@ -13,7 +13,7 @@ import {
 import katex from "katex";
 
 // --- Constants ---
-const STOP_CHARS = ["+", "-", "=", "\u2212", "<", ">", "\u2264", "\u2265", "\u2248", "\u2192", ",", "\u00B1", "\u2213"];
+const STOP_CHARS = ["=", "<", ">", "\u2264", "\u2265", "\u2248", "\u2192", ","];
 
 // --- Custom Components for Missing Features ---
 
@@ -403,7 +403,13 @@ function walkNode(node: Element | null): any[] {
                         
                         // Check for stop condition
                         let stop = false;
-                        if (next instanceof ExtendedMathRun && next.isOperator) {
+                        
+                        // Stop if the next element is another N-ary operator (e.g. \int ... \int ...)
+                        if (next instanceof MathNary) {
+                            stop = true;
+                        }
+                        // Stop if the next element is a relational operator or punctuation
+                        else if (next instanceof ExtendedMathRun && next.isOperator) {
                             if (STOP_CHARS.includes(next.textContent)) {
                                 stop = true;
                             }
@@ -670,8 +676,11 @@ export function convertLatexToMath(latex: string, displayMode: boolean = false):
             displayMode: displayMode
         });
         return mathmlToDocx(mathml);
-    } catch (e) {
+    } catch (e: any) {
         console.error("KaTeX error", e);
-        return [new MathRun(latex)];
+        // Return error message in red to help debugging
+        const errorRun = new MathRun(`Error: ${e.message}`);
+        // We can't easily set color on MathRun, but the text will be visible.
+        return [errorRun];
     }
 }

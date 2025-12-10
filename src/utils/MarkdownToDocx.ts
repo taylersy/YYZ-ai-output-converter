@@ -27,6 +27,18 @@ export function normalizeMarkdown(markdown: string): string {
         return `\n\n$$\n${content.trim()}\n$$\n\n`;
     });
 
+    // 4. Fix for "math treated as code block due to indentation"
+    // Users often indent text with 4 spaces, which Markdown treats as a code block.
+    // If the indented line contains math ($...$), we assume it's text, not code.
+    // We replace leading spaces/tabs with Non-Breaking Spaces (\u00A0) which count as text.
+    normalized = normalized.replace(/^( +|\t+)(?=.*\$)/gm, (match) => {
+        // Only replace if length >= 4 spaces or any tab (since 4 spaces triggers code block)
+        if (match.includes('\t') || match.length >= 4) {
+             return match.replace(/ /g, '\u00A0').replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0');
+        }
+        return match;
+    });
+
     return normalized;
 }
 

@@ -107,7 +107,7 @@ function parseMarkdown(markdown: string): any[] {
                 const headingLevel = level <= 6 ? `HEADING_${level}` : "HEADING_6";
                 
                 children.push(new Paragraph({
-                    text: text,
+                    children: parseInline(text),
                     heading: HeadingLevel[headingLevel as keyof typeof HeadingLevel],
                 }));
             }
@@ -153,14 +153,14 @@ function createParagraph(lines: string[]) {
     });
 }
 
-function parseInline(text: string): any[] {
+function parseInline(text: string, style: any = {}): any[] {
     const parts: any[] = [];
     
     // Regex for:
     // 1. Inline math: $...$ (non-greedy)
     // 2. Bold: **...** (non-greedy)
     // 3. Italic: *...* (non-greedy)
-    // Note: This is a simplified parser. It might fail on nested or complex cases.
+    // Note: This is a simplified parser. It handles nested math inside bold/italics.
     
     const regex = /(\$[^$]+\$)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
     
@@ -170,34 +170,41 @@ function parseInline(text: string): any[] {
     while ((match = regex.exec(text)) !== null) {
         // Text before match
         if (match.index > lastIndex) {
-            parts.push(new TextRun(text.substring(lastIndex, match.index)));
+            parts.push(new TextRun({
+                text: text.substring(lastIndex, match.index),
+                ...style
+            }));
         }
         
         const content = match[0];
         
         if (content.startsWith('$')) {
-            // Inline math
+            // Inline math - Math elements don't inherit text styles like bold directly in the same way,
+            // but we process them as math.
             const latex = content.substring(1, content.length - 1);
             const mathNodes = convertLatexToMath(latex, false);
             parts.push(new Math({
                 children: mathNodes
             }));
         } else if (content.startsWith('**')) {
-            // Bold
-            const boldText = content.substring(2, content.length - 2);
-            parts.push(new TextRun({ text: boldText, bold: true }));
+            // Bold - Recurse to handle nested math or mixed content
+            const innerText = content.substring(2, content.length - 2);
+            parts.push(...parseInline(innerText, { ...style, bold: true }));
         } else if (content.startsWith('*')) {
-            // Italic
-            const italicText = content.substring(1, content.length - 1);
-            parts.push(new TextRun({ text: italicText, italics: true }));
+            // Italic - Recurse to handle nested math or mixed content
+            const innerText = content.substring(1, content.length - 1);
+            parts.push(...parseInline(innerText, { ...style, italics: true }));
         }
         
         lastIndex = regex.lastIndex;
     }
     
     if (lastIndex < text.length) {
-        parts.push(new TextRun(text.substring(lastIndex)));
+        parts.push(new TextRun({
+            text: text.substring(lastIndex),
+            ...style
+        }));
     }
     
-    return parts.length > 0 ? parts : [new TextRun(text)];
+    return parts.length > 0 ? parts : [new TextRun({ text: text, ...style })];
 }

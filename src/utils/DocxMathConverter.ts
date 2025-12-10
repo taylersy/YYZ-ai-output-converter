@@ -20,6 +20,16 @@ class MathValAttribute extends XmlAttributeComponent<{ val: string }> {
     protected readonly xmlKeys = { val: "m:val" };
 }
 
+class GenericXmlComponent extends XmlComponent {
+    constructor(rootKey: string) {
+        super(rootKey);
+    }
+    
+    public addChild(child: any) {
+        this.root.push(child);
+    }
+}
+
 class MathAccentChar extends XmlComponent {
     constructor(val: string) {
         super("m:chr");
@@ -62,22 +72,22 @@ class MathMatrixProperties extends XmlComponent {
         //   </m:mc>
         // </m:mcs>
         
-        const mcs = new XmlComponent("m:mcs");
-        const mc = new XmlComponent("m:mc");
-        const mcPr = new XmlComponent("m:mcPr");
+        const mcs = new GenericXmlComponent("m:mcs");
+        const mc = new GenericXmlComponent("m:mc");
+        const mcPr = new GenericXmlComponent("m:mcPr");
         
         // Column count: 1 (Word repeats the last column definition for remaining columns)
-        const count = new XmlComponent("m:count");
-        count.root.push(new MathValAttribute({ val: "1" }));
+        const count = new GenericXmlComponent("m:count");
+        count.addChild(new MathValAttribute({ val: "1" }));
         
         // Alignment: center (Fixes alignment issues in determinants/matrices)
-        const jc = new XmlComponent("m:mcJc");
-        jc.root.push(new MathValAttribute({ val: "center" }));
+        const jc = new GenericXmlComponent("m:mcJc");
+        jc.addChild(new MathValAttribute({ val: "center" }));
         
-        mcPr.root.push(count);
-        mcPr.root.push(jc);
-        mc.root.push(mcPr);
-        mcs.root.push(mc);
+        mcPr.addChild(count);
+        mcPr.addChild(jc);
+        mc.addChild(mcPr);
+        mcs.addChild(mc);
         
         this.root.push(mcs);
     }

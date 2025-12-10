@@ -252,6 +252,9 @@ export function mathmlToDocx(mathml: string): any[] {
 function walkNode(node: Element | null): any[] {
     if (!node) return [];
     
+    // Defensive check: Ensure node is an Element with a tagName
+    if (!node.tagName) return [];
+
     const tagName = node.tagName.toLowerCase();
     const children = Array.from(node.children);
 
@@ -394,38 +397,12 @@ function walkNode(node: Element | null): any[] {
 
             // Post-processing for N-ary operators (Integrals/Sums) to greedily consume next terms
             // This fixes the "extra space" issue by putting the operand INSIDE the N-ary element
-            /* 
+            
+            // NOTE: Disabled greedy consumption as it caused issues with \frac and removed desired spaces
+            /*
             for (let i = 0; i < result.length; i++) {
-                const component = result[i];
-                if (component instanceof MathNary) {
-                    // Greedy consumption
-                    while (i + 1 < result.length) {
-                        const next = result[i + 1];
-                        
-                        // Check for stop condition
-                        let stop = false;
-                        
-                        // Stop if the next element is another N-ary operator (e.g. \int ... \int ...)
-                        if (next instanceof MathNary) {
-                            stop = true;
-                        }
-                        // Stop if the next element is a relational operator or punctuation
-                        else if (next instanceof ExtendedMathRun && next.isOperator) {
-                            if (STOP_CHARS.includes(next.textContent)) {
-                                stop = true;
-                            }
-                        }
-                        
-                        if (stop) break;
-                        
-                        // Consume
-                        component.appendChildToBody(next);
-                        result.splice(i + 1, 1);
-                        // Don't increment i, because we removed the next element, 
-                        // so the *new* next element is at i + 1.
-                    }
-                }
-            } 
+                ...
+            }
             */
 
             return result;
@@ -530,7 +507,7 @@ function walkNode(node: Element | null): any[] {
             
             // Check for accent
             // KaTeX often puts accent="true" on mo, or we can detect common accents
-            const isAccent = over.tagName.toLowerCase() === 'mo' && (over.getAttribute('accent') === 'true' || isAccentChar(over.textContent || ""));
+            const isAccent = over.tagName && over.tagName.toLowerCase() === 'mo' && (over.getAttribute('accent') === 'true' || isAccentChar(over.textContent || ""));
             
             if (isAccent) {
                 return [new MathAccent({
@@ -596,10 +573,10 @@ function walkNode(node: Element | null): any[] {
         case "mtable": {
             const rows = Array.from(children).map(child => {
                 // child should be mtr
-                if (child.tagName.toLowerCase() === "mtr") {
+                if (child.tagName && child.tagName.toLowerCase() === "mtr") {
                     const cells = Array.from(child.children).map(cell => {
                         // cell should be mtd
-                        if (cell.tagName.toLowerCase() === "mtd") {
+                        if (cell.tagName && cell.tagName.toLowerCase() === "mtd") {
                             return new MathElement(walkNode(cell));
                         }
                         return new MathElement([]); // Empty cell fallback
@@ -651,7 +628,7 @@ function isAccentChar(text: string): boolean {
 }
 
 function isFence(node: Element): boolean {
-    if (node.tagName.toLowerCase() !== 'mo') return false;
+    if (!node.tagName || node.tagName.toLowerCase() !== 'mo') return false;
     
     // Explicit fence attribute from KaTeX
     if (node.getAttribute('fence') === 'true') return true;

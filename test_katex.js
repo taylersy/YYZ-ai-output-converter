@@ -22,13 +22,14 @@ function normalizeMarkdown(markdown) {
     return normalized;
 }
 
+// NOTE: We must escape backslashes in JS strings!
 const input1 = `#### （1）**欧拉-拉格朗日方程（场论形式）** 
  数学物理中变分法的核心，用于推导物理系统的运动方程： 
- $$\frac{\partial \mathcal{L}}{\partial \phi}-\partial_\mu\left(\frac{\partial \mathcal{L}}{\partial (\partial_\mu \phi)}\right)=0$$`;
+ $$\\frac{\\partial \\mathcal{L}}{\\partial \\phi}-\\partial_\\mu\\left(\\frac{\\partial \\mathcal{L}}{\\partial (\\partial_\\mu \\phi)}\\right)=0$$`;
 
 const input2 = `#### （2）**路径积分公式（费曼路径积分）** 
  量子力学的第三种表述形式，将量子跃迁概率表示为所有可能路径的积分： 
- $$\langle q_f,t_f|q_i,t_i\rangle=\int\mathcal{D}[q(t)]\exp\left\{\frac{i}{\hbar}S[q(t)]\right\}$$`;
+ $$\\langle q_f,t_f|q_i,t_i\\rangle=\\int\\mathcal{D}[q(t)]\\exp\\left\\{\\frac{i}{\\hbar}S[q(t)]\\right\\}$$`;
 
 // Check if normalizeMarkdown breaks it
 console.log("\n--- Testing Normalize Input 1 ---");
@@ -53,6 +54,7 @@ if (match2) {
              displayMode: true
         });
         console.log("KaTeX Render Success");
+        // console.log(mathml);
     } catch (e) {
         console.error("KaTeX Render Failed:", e);
     }

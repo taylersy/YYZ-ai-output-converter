@@ -90,66 +90,6 @@ function App() {
             <ReactMarkdown
               remarkPlugins={[remarkMath]}
               rehypePlugins={[rehypeKatex]}
-              components={{
-                pre: ({ node, children, ...props }: any) => {
-                  // 检查是否包含语言标记
-                  // children 可能是数组或单个元素
-                  const child = Array.isArray(children) ? children[0] : children;
-                  const childProps = (child as any)?.props;
-                  const className = childProps?.className || '';
-                  const isLanguage = /language-(\w+)/.test(className);
-                  
-                  if (!isLanguage) {
-                    // 如果没有语言标记，通常是缩进导致的误判
-                    // 渲染为透明背景、允许换行、使用正文字体的容器
-                    return (
-                      <div 
-                        style={{ 
-                          background: 'transparent',
-                          padding: '0.5rem 0', // 稍微给点上下间距
-                          overflowX: 'visible',
-                          whiteSpace: 'pre-wrap', // 允许自动换行
-                          fontFamily: 'inherit',
-                          border: 'none',
-                          margin: 0
-                        }} 
-                        {...props}
-                      >
-                        {children}
-                      </div>
-                    );
-                  }
-                  
-                  // 正常的代码块保留原样
-                  return <pre {...props}>{children}</pre>;
-                },
-                code: ({ node, inline, className, children, ...props }: any) => {
-                  const match = /language-(\w+)/.exec(className || '');
-                  if (!inline && !match) {
-                    // 配合 pre 的修改，去除代码块样式
-                    return (
-                      <code 
-                        className={className} 
-                        style={{ 
-                          background: 'transparent',
-                          fontFamily: 'inherit',
-                          color: 'inherit',
-                          padding: 0,
-                          border: 'none'
-                        }} 
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    );
-                  }
-                  return (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-              }}
             >
               {normalizeMarkdown(markdown)}
             </ReactMarkdown>

@@ -26,6 +26,10 @@ class GenericXmlComponent extends XmlComponent {
     public addChild(child: any) {
         this.root.push(child);
     }
+
+    public getLastChild(): any {
+        return this.root.length > 0 ? this.root[this.root.length - 1] : null;
+    }
 }
 
 class MathAccentChar extends XmlComponent {
@@ -121,7 +125,9 @@ class MathNaryProperties extends XmlComponent {
     }
 }
 
-class MathNary extends XmlComponent {
+export class MathNary extends XmlComponent {
+    private baseElement: GenericXmlComponent;
+
     constructor(options: {
         char: string,
         limitLocation?: "subSup" | "undOvr",
@@ -144,14 +150,22 @@ class MathNary extends XmlComponent {
         }
         this.root.push(sup);
 
-        const elem = new GenericXmlComponent("m:e");
+        this.baseElement = new GenericXmlComponent("m:e");
         if (options.children && options.children.length > 0) {
-            options.children.forEach(child => elem.addChild(child));
+            options.children.forEach(child => this.baseElement.addChild(child));
         } else {
             // Add zero-width space to hide placeholder box
-            elem.addChild(new MathRun("\u200B"));
+            this.baseElement.addChild(new MathRun("\u200B"));
         }
-        this.root.push(elem);
+        this.root.push(this.baseElement);
+    }
+
+    public addChildToBase(child: any) {
+        this.baseElement.addChild(child);
+    }
+
+    public getLastBaseChild(): any {
+        return this.baseElement.getLastChild();
     }
 }
 
@@ -235,6 +249,36 @@ function walkNode(node: Element | null): any[] {
 
             const result: any[] = [];
             let stack: { startNode: Element, children: any[], openChar: string }[] = [];
+
+            // Helper to append nodes, with greedy N-ary handling
+            const appendToContext = (container: any[], item: any) => {
+                let appended = false;
+                if (container.length > 0) {
+                    let last = container[container.length - 1];
+                    // Iterative dive to find the deepest right-most N-ary operator
+                    // This ensures chains like \int \int or \int ( \int ) are handled correctly
+                    // But we must be careful not to dive into non-N-ary structures (like fences) 
+                    // unless we want to? No, fences are closed.
+                    // MathDelimiter is NOT MathNary.
+                    
+                    while (last instanceof MathNary) {
+                        const innerLast = last.getLastBaseChild();
+                        if (innerLast instanceof MathNary) {
+                            last = innerLast;
+                        } else {
+                            // Found the deepest N-ary that doesn't end with another N-ary
+                            // Append here
+                            last.addChildToBase(item);
+                            appended = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!appended) {
+                    container.push(item);
+                }
+            };
 
             for (let i = 0; i < children.length; i++) {
                 const child = children[i];
@@ -320,26 +364,27 @@ function walkNode(node: Element | null): any[] {
                                 normalizeFence(char)
                             );
                             
-                            if (stack.length > 0) {
-                                stack[stack.length - 1].children.push(delim);
-                            } else {
-                                result.push(delim);
-                            }
+                            const targetStack = stack.length > 0 ? stack[stack.length - 1].children : result;
+                            appendToContext(targetStack, delim);
                         } else {
                             // Unmatched close fence, treat as text
-                             result.push(...walkNode(child));
+                            const nodes = walkNode(child);
+                            nodes.forEach(n => result.push(n)); // Treat unmatched close as normal nodes, don't append to Nary? Or do?
+                            // Usually unmatched close like ) shouldn't be consumed by Nary inside the fence.
+                            // But here we are outside.
+                            // Let's stick to simple push for now to avoid consuming a trailing ')' if logic is flawed.
                         }
                     } else {
-                         result.push(...walkNode(child));
+                         const nodes = walkNode(child);
+                         const targetStack = stack.length > 0 ? stack[stack.length - 1].children : result;
+                         nodes.forEach(n => appendToContext(targetStack, n));
                     }
 
                 } else {
                     // Not a fence
-                    if (stack.length > 0) {
-                        stack[stack.length - 1].children.push(child);
-                    } else {
-                        result.push(...walkNode(child));
-                    }
+                    const nodes = walkNode(child);
+                    const targetStack = stack.length > 0 ? stack[stack.length - 1].children : result;
+                    nodes.forEach(n => appendToContext(targetStack, n));
                 }
             }
 
@@ -351,11 +396,8 @@ function walkNode(node: Element | null): any[] {
                     normalizeFence(top.openChar), 
                     "" // Auto-close with empty
                 );
-                if (stack.length > 0) {
-                    stack[stack.length - 1].children.push(delim);
-                } else {
-                    result.push(delim);
-                }
+                const targetStack = stack.length > 0 ? stack[stack.length - 1].children : result;
+                appendToContext(targetStack, delim);
             }
 
             return result;

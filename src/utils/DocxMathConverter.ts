@@ -1,8 +1,6 @@
 import {
     MathRun,
     MathFraction,
-    MathSum,
-    MathIntegral,
     MathSuperScript,
     MathSubScript,
     MathSubSuperScript,
@@ -105,6 +103,52 @@ class MathMatrix extends XmlComponent {
         super("m:m");
         this.root.push(new MathMatrixProperties());
         rows.forEach(row => this.root.push(row));
+    }
+}
+
+// --- N-ary Operator Support (Integrals, Sums, Products) ---
+
+class MathNaryProperties extends XmlComponent {
+    constructor(chr: string, limitLocation?: "subSup" | "undOvr") {
+        super("m:naryPr");
+        this.root.push(new MathAccentChar(chr)); // Reuse MathAccentChar for m:chr
+        
+        if (limitLocation) {
+            const limLoc = new GenericXmlComponent("m:limLoc");
+            limLoc.addChild(new MathValAttribute({ val: limitLocation }));
+            this.root.push(limLoc);
+        }
+    }
+}
+
+class MathNary extends XmlComponent {
+    constructor(options: {
+        char: string,
+        limitLocation?: "subSup" | "undOvr",
+        subScript?: any[],
+        superScript?: any[],
+        children?: any[]
+    }) {
+        super("m:nary");
+        this.root.push(new MathNaryProperties(options.char, options.limitLocation));
+        
+        const sub = new GenericXmlComponent("m:sub");
+        if (options.subScript) {
+            options.subScript.forEach(child => sub.addChild(child));
+        }
+        this.root.push(sub);
+
+        const sup = new GenericXmlComponent("m:sup");
+        if (options.superScript) {
+            options.superScript.forEach(child => sup.addChild(child));
+        }
+        this.root.push(sup);
+
+        const elem = new GenericXmlComponent("m:e");
+        if (options.children) {
+            options.children.forEach(child => elem.addChild(child));
+        }
+        this.root.push(elem);
     }
 }
 
@@ -356,20 +400,24 @@ function walkNode(node: Element | null): any[] {
         
         case "msubsup": {
             const [base, sub, sup] = children;
-            // Check if base is an operator (integral, sum) to use MathIntegral/MathSum
+            // Check if base is an operator (integral, sum) to use MathNary
             const baseText = base.textContent || "";
             if (isIntegral(baseText)) {
-                return [new MathIntegral({
-                    children: [new MathRun(baseText)], // The operator
+                return [new MathNary({
+                    char: baseText,
+                    limitLocation: "subSup", // Integrals usually have limits to the right
                     subScript: walkNode(sub),
-                    superScript: walkNode(sup)
+                    superScript: walkNode(sup),
+                    children: [] // Empty body
                 })];
             }
             if (isSum(baseText)) {
-                return [new MathSum({
-                    children: [new MathRun(baseText)],
+                return [new MathNary({
+                    char: baseText,
+                    limitLocation: "subSup", // Inline sums have limits to the right
                     subScript: walkNode(sub),
-                    superScript: walkNode(sup)
+                    superScript: walkNode(sup),
+                    children: []
                 })];
             }
             return [new MathSubSuperScript({
@@ -425,17 +473,21 @@ function walkNode(node: Element | null): any[] {
             const baseText = base.textContent || "";
             
             if (isIntegral(baseText)) {
-                 return [new MathIntegral({
-                    children: [new MathRun(baseText)],
+                 return [new MathNary({
+                    char: baseText,
+                    limitLocation: "undOvr", // Explicit over/under limits
                     subScript: walkNode(under),
-                    superScript: walkNode(over)
+                    superScript: walkNode(over),
+                    children: []
                 })];
             }
             if (isSum(baseText)) {
-                 return [new MathSum({
-                    children: [new MathRun(baseText)],
+                 return [new MathNary({
+                    char: baseText,
+                    limitLocation: "undOvr", // Display sums have limits above/below
                     subScript: walkNode(under),
-                    superScript: walkNode(over)
+                    superScript: walkNode(over),
+                    children: []
                 })];
             }
             
@@ -490,7 +542,8 @@ function isIntegral(text: string): boolean {
 }
 
 function isSum(text: string): boolean {
-    return /[\u2211\u22C0\u22C1\u22C2\u22C3\u2A00\u2A01\u2A02\u2A04\u2A06]/.test(text);
+    // Include Sum (\u2211), Product (\u220F), Coproduct (\u2210) and other N-ary operators
+    return /[\u2211\u220F\u2210\u22C0\u22C1\u22C2\u22C3\u2A00\u2A01\u2A02\u2A04\u2A06]/.test(text);
 }
 
 function isAccentChar(text: string): boolean {

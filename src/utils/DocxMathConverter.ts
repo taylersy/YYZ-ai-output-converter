@@ -16,14 +16,14 @@ import katex from "katex";
 
 // --- Custom Components for Missing Features ---
 
-class MathAccentCharAttributes extends XmlAttributeComponent<{ val: string }> {
+class MathValAttribute extends XmlAttributeComponent<{ val: string }> {
     protected readonly xmlKeys = { val: "m:val" };
 }
 
 class MathAccentChar extends XmlComponent {
     constructor(val: string) {
         super("m:chr");
-        this.root.push(new MathAccentCharAttributes({ val }));
+        this.root.push(new MathValAttribute({ val }));
     }
 }
 
@@ -52,7 +52,7 @@ export class MathAccent extends XmlComponent {
 class MathMatrixProperties extends XmlComponent {
     constructor() {
         super("m:mPr");
-        // Define matrix column gap to regular
+        // Define matrix column properties (m:mcs) to ensure correct spacing and alignment
         // <m:mcs>
         //   <m:mc>
         //     <m:mcPr>
@@ -61,7 +61,25 @@ class MathMatrixProperties extends XmlComponent {
         //     </m:mcPr>
         //   </m:mc>
         // </m:mcs>
-        // For simplicity, we use default properties which are usually fine
+        
+        const mcs = new XmlComponent("m:mcs");
+        const mc = new XmlComponent("m:mc");
+        const mcPr = new XmlComponent("m:mcPr");
+        
+        // Column count: 1 (Word repeats the last column definition for remaining columns)
+        const count = new XmlComponent("m:count");
+        count.root.push(new MathValAttribute({ val: "1" }));
+        
+        // Alignment: center (Fixes alignment issues in determinants/matrices)
+        const jc = new XmlComponent("m:mcJc");
+        jc.root.push(new MathValAttribute({ val: "center" }));
+        
+        mcPr.root.push(count);
+        mcPr.root.push(jc);
+        mc.root.push(mcPr);
+        mcs.root.push(mc);
+        
+        this.root.push(mcs);
     }
 }
 
@@ -152,33 +170,138 @@ function walkNode(node: Element | null): any[] {
             return walkChildren(children);
 
         case "mrow": {
-            // Check for fences (delimiters)
-            // KaTeX often outputs <mrow><mo fence="true">(</mo> ... <mo fence="true">)</mo></mrow>
-            if (children.length >= 2) {
-                const first = children[0];
-                const last = children[children.length - 1];
+            // Advanced fence handling with stack to support:
+            // 1. cases: { ... (no close)
+            // 2. P(A|B): P, (, A, |, B, ) (P outside)
+            // 3. (a) + (b): Separate delimiters
+            // 4. Nested: ( a + ( b ) )
+
+            const result: any[] = [];
+            let stack: { startNode: Element, children: any[], openChar: string }[] = [];
+
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                const isChildFence = isFence(child);
                 
-                const isFirstFence = isFence(first);
-                const isLastFence = isFence(last);
-
-                if (isFirstFence || isLastFence) {
-                    const begChr = isFirstFence ? (first.textContent || "") : "";
-                    const endChr = isLastFence ? (last.textContent || "") : "";
+                if (isChildFence) {
+                    const char = child.textContent || "";
                     
-                    // Filter out the fence nodes from children
-                    const contentNodes = children.slice(
-                        isFirstFence ? 1 : 0, 
-                        isLastFence ? children.length - 1 : children.length
-                    );
+                    // Determine if it's an opener, closer, or ambiguous
+                    const isOpener = ['(', '[', '{', '\u27E8', '\u2016'].includes(char) || char === 'l'; // 'l' unlikely but safe
+                    const isCloser = [')', ']', '}', '\u27E9'].includes(char);
+                    // Add \u2223 (divides) to ambiguous list, as KaTeX uses it for |
+                    const isAmbiguous = ['|', '\u2016', '.', '\u2223'].includes(char);
                     
-                    // Handle "." as empty delimiter
-                    const cleanBeg = begChr === "." ? "" : begChr;
-                    const cleanEnd = endChr === "." ? "" : endChr;
+                    // Special handling for explicit KaTeX fence attribute
+                    // If fence="true", trust it?
+                    // KaTeX often marks both ( and ) as fence="true".
+                    
+                    // Logic for ambiguous (like |):
+                    // If stack top is same char, treat as closer. Else opener.
+                    // For '.', it's usually empty placeholder. Treated as ambiguous/closer?
+                    
+                    let action = 'text'; // default
+                    
+                    if (isOpener) action = 'open';
+                    else if (isCloser) action = 'close';
+                    else if (isAmbiguous) {
+                        if (stack.length > 0 && stack[stack.length - 1].openChar === char) {
+                            action = 'close';
+                        } else {
+                            action = 'open';
+                        }
+                    }
 
-                    return [new MathDelimiter(walkChildren(contentNodes), cleanBeg, cleanEnd)];
+                    // Handle Mismatched Close:
+                    // If we have ')' but stack top is '|', maybe we should close '|' first?
+                    if (action === 'close' && stack.length > 0) {
+                        const top = stack[stack.length - 1];
+                        if (!isPair(top.openChar, char) && !isAmbiguous) {
+                            // Look down the stack
+                            let found = false;
+                            for (let j = stack.length - 1; j >= 0; j--) {
+                                if (isPair(stack[j].openChar, char)) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                // Close everything up to the match
+                                while (stack.length > 0) {
+                                    const currentTop = stack[stack.length - 1];
+                                    if (isPair(currentTop.openChar, char)) {
+                                        // Found match, standard close will handle it
+                                        break;
+                                    } else {
+                                        // Auto-close mismatched inner fence
+                                        stack.pop();
+                                        const delim = new MathDelimiter(
+                                            walkChildren(currentTop.children), 
+                                            normalizeFence(currentTop.openChar), 
+                                            "" // Auto-close with empty
+                                        );
+                                        // Add to new top (or result)
+                                        if (stack.length > 0) {
+                                            stack[stack.length - 1].children.push(delim);
+                                        } else {
+                                            result.push(delim);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (action === 'open') {
+                        stack.push({ startNode: child, children: [], openChar: char });
+                    } else if (action === 'close') {
+                        if (stack.length > 0) {
+                            const top = stack.pop()!;
+                            const delim = new MathDelimiter(
+                                walkChildren(top.children), 
+                                normalizeFence(top.openChar), 
+                                normalizeFence(char)
+                            );
+                            
+                            if (stack.length > 0) {
+                                stack[stack.length - 1].children.push(delim);
+                            } else {
+                                result.push(delim);
+                            }
+                        } else {
+                            // Unmatched close fence, treat as text
+                             result.push(...walkNode(child));
+                        }
+                    } else {
+                         result.push(...walkNode(child));
+                    }
+
+                } else {
+                    // Not a fence
+                    if (stack.length > 0) {
+                        stack[stack.length - 1].children.push(child);
+                    } else {
+                        result.push(...walkNode(child));
+                    }
                 }
             }
-            return walkChildren(children);
+
+            // Close any remaining open fences (e.g. cases { ...)
+            while (stack.length > 0) {
+                const top = stack.pop()!;
+                const delim = new MathDelimiter(
+                    walkChildren(top.children), 
+                    normalizeFence(top.openChar), 
+                    "" // Auto-close with empty
+                );
+                if (stack.length > 0) {
+                    stack[stack.length - 1].children.push(delim);
+                } else {
+                    result.push(delim);
+                }
+            }
+
+            return result;
         }
         
         case "mfenced": {
@@ -386,6 +509,25 @@ function isFence(node: Element): boolean {
     const text = node.textContent || "";
     const fenceChars = ['(', ')', '[', ']', '{', '}', '|', '\u2016', '\u27E8', '\u27E9', '.'];
     return fenceChars.includes(text);
+}
+
+function isPair(open: string, close: string): boolean {
+    if (open === '(' && close === ')') return true;
+    if (open === '[' && close === ']') return true;
+    if (open === '{' && close === '}') return true;
+    if (open === '\u27E8' && close === '\u27E9') return true; // angle brackets
+    if (open === '\u2016' && close === '\u2016') return true; // double vert
+    // Match | with | (both regular and divides char)
+    if ((open === '|' || open === '\u2223') && (close === '|' || close === '\u2223')) return true;
+    return false;
+}
+
+// Handle "." as empty delimiter
+// Also normalize "∣" (0x2223) to "|" (0x007C) for Word compatibility
+function normalizeFence(ch: string): string {
+    if (ch === ".") return "";
+    if (ch.charCodeAt(0) === 0x2223) return "|";
+    return ch;
 }
 
 export function convertLatexToMath(latex: string, displayMode: boolean = false): any[] {

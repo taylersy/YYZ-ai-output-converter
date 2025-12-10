@@ -27,6 +27,29 @@ export function normalizeMarkdown(markdown: string): string {
         return `\n\n$$\n${content.trim()}\n$$\n\n`;
     });
 
+    // 4. Auto-wrap "naked" LaTeX commands that are missing delimiters (Common with AI output)
+    // Heuristic: Find segments containing backslash commands (\frac, \int, etc.) that are NOT surrounded by $
+    // We process this by splitting text by Chinese characters to isolate potential math segments
+    // Note: This is a "best effort" heuristic.
+    
+    // Pattern: Look for sequences that contain '\' followed by a letter, 
+    // and strictly DO NOT contain '$' (to avoid double wrapping).
+    // We use a regex that matches a sequence of non-Chinese, non-$ characters that contains at least one \letter
+    normalized = normalized.replace(/([^\u4e00-\u9fa5\$\n]*\\[a-zA-Z]+[^\u4e00-\u9fa5\$\n]*)/g, (match) => {
+        // Double check it's not already wrapped (regex lookaround is limited in JS)
+        // If the match itself contains $, ignore it (though regex above should prevent this)
+        if (match.includes('$')) return match;
+        
+        // Trim whitespace
+        const trimmed = match.trim();
+        if (trimmed.length < 2) return match;
+
+        // Ensure it really looks like a command
+        if (!/\\[a-zA-Z]/.test(trimmed)) return match;
+
+        return ` $${trimmed}$ `;
+    });
+
     return normalized;
 }
 

@@ -70,6 +70,9 @@ function App() {
             </button>
             <button className="clear-btn" onClick={handleClear}>清空内容</button>
           </div>
+          <div style={{fontSize: '12px', color: '#666', marginBottom: '10px', paddingRight: '5px', textAlign: 'right'}}>
+             iOS用户提示: 若跳转预览页，请点击分享按钮选"存储到文件"
+          </div>
           
           <MathEditor onInsert={handleInsertMath} />
           
